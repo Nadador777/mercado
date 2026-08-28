@@ -423,7 +423,7 @@
     </div>
   </div>
 </div>
-<input type="file" id="proofInput" accept="image/*" style="display:none;">
+<input type="file" id="proofInput" accept="image/*" multiple style="display:none;">
 <input type="file" id="galeriaInput" accept="image/*" multiple style="display:none;">
 
 <div class="lightbox" id="lightbox">
@@ -539,7 +539,27 @@
   function leerArchivo(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
+      reader.onload = () => {
+        const url = reader.result;
+        if (file.type && file.type.indexOf('image/') === 0) {
+          const img = new Image();
+          img.onload = () => {
+            const MAX = 600;
+            let w = img.width, h = img.height;
+            if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            try { resolve(canvas.toDataURL('image/jpeg', 0.7)); }
+            catch (e) { resolve(url); }
+          };
+          img.onerror = () => resolve(url);
+          img.src = url;
+        } else {
+          resolve(url);
+        }
+      };
       reader.onerror = () => reject(reader.error);
       reader.readAsDataURL(file);
     });
@@ -949,13 +969,16 @@
   });
 
   document.getElementById('proofInput').addEventListener('change', async e => {
-    const file = e.target.files[0];
+    const files = Array.from(e.target.files);
     e.target.value = '';
-    if (!file || !itemActual) return;
-    let foto = null;
-    try { foto = await leerArchivo(file); }
-    catch (err) { alert('No se pudo leer la foto.'); return; }
-    await addProof({ itemId: itemActual.id, foto, fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) });
+    if (!files.length || !itemActual) return;
+    for (const file of files) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const foto = await leerArchivo(file);
+        await addProof({ itemId: itemActual.id, foto, fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) });
+      } catch (err) { alert('No se pudo leer una foto.'); }
+    }
     pintarProofs(itemActual);
   });
 
